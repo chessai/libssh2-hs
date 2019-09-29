@@ -76,7 +76,8 @@ import Foreign hiding (void)
 import Foreign.C.Types
 import Foreign.C.String
 import System.IO
-import Network.Socket (Socket(MkSocket), isReadable)
+import System.IO.Unsafe (unsafePerformIO)
+import Network.Socket (Socket,withFdSocket)
 import qualified Data.ByteString as BSS
 import qualified Data.ByteString.Unsafe as BSS
 
@@ -154,12 +155,13 @@ ssh2socket :: Socket
 #else
            -> CInt
 #endif
-ssh2socket (MkSocket s _ _ _ _) =
+ssh2socket sock = unsafePerformIO $ withFdSocket sock $ \fd ->
 #ifdef mingw32_HOST_OS
-  (fromIntegral s)
+  pure (fromIntegral fd)
 #else
-  s
+  pure fd
 #endif
+{-# noinline ssh2socket #-}
 
 {# fun init as initialize_
   { init_crypto `Bool' } -> `Int' #}
@@ -543,7 +545,10 @@ pollChannelRead ch = do
   mbSocket <- sessionGetSocket (channelSession ch)
   case mbSocket of
     Nothing -> error "pollChannelRead without socket present"
-    Just socket -> isReadable socket
+    Just socket -> do
+      -- i don't know how to recreate this. the functionality
+      -- of `isReadable` is deprecated. this needs to be fixed.
+      pure True --isReadable socket
 
 --
 -- | Sftp support

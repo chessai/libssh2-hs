@@ -3,15 +3,15 @@
 --
 -- On most platforms this uses 'Control.Concurrent.threadWaitRead' or
 -- 'Conctrol.Concurrent.threadWaitWrite', but on Windows we need to do
--- something different. 
+-- something different.
 --
 -- See <http://hackage.haskell.org/trac/ghc/ticket/5797>.
-module Network.SSH.Client.LibSSH2.WaitSocket 
+module Network.SSH.Client.LibSSH2.WaitSocket
   ( threadWaitRead
   , threadWaitWrite
   ) where
 
-import Network.Socket(Socket,fdSocket)
+import Network.Socket(Socket,withFdSocket)
 import System.Posix.Types(Fd(Fd))
 
 #ifdef mingw32_HOST_OS
@@ -26,11 +26,10 @@ import qualified GHC.Conc (threadWaitRead, threadWaitWrite)
 #endif
 
 threadWaitRead :: Socket -> IO ()
-threadWaitRead = threadWaitRead_ . Fd . fdSocket
+threadWaitRead sock = withFdSocket sock $ \fd -> threadWaitRead_ (Fd fd)
 
 threadWaitWrite :: Socket -> IO ()
-threadWaitWrite = threadWaitWrite_ . Fd . fdSocket
-
+threadWaitWrite sock = withFdSocket sock $ \fd -> threadWaitWrite_ (Fd fd)
 -- | Block the current thread until data is available to read on the
 -- given file descriptor (GHC only).
 --
@@ -47,12 +46,12 @@ threadWaitRead_ fd
   -- and this only works with -threaded.
   | threaded  = withThread (waitFd fd 0)
   | otherwise = case fd of
-      0 -> do 
+      0 -> do
         -- hWaitForInput does work properly, but we can only
         -- do this for stdin since we know its FD.
         _ <- hWaitForInput stdin (-1)
         return ()
-      _ -> 
+      _ ->
         error "threadWaitRead requires -threaded on Windows, or use System.IO.hWaitForInput"
 #else
   = GHC.Conc.threadWaitRead fd
@@ -86,10 +85,10 @@ withThread io = do
     Left e  -> throwIO (e :: IOException)
 
 -- The last argument can be 1 (true) because this will only be applied to
--- sockets 
+-- sockets
 waitFd :: Fd -> CInt -> IO ()
-waitFd fd write = 
-    throwErrnoIfMinus1_ "fdReady" $ fdReady (fromIntegral fd) write iNFINITE 1 
+waitFd fd write =
+    throwErrnoIfMinus1_ "fdReady" $ fdReady (fromIntegral fd) write iNFINITE 1
   where
     iNFINITE :: CInt
     iNFINITE = 0xFFFFFFFF -- urgh
